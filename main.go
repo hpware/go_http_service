@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,7 +15,8 @@ var upgrader = websocket.Upgrader{
 }
 
 type Message struct {
-	Command string `json:"command"`
+	Command string          `json:"command"`
+	Args    json.RawMessage `json"args"`
 }
 
 func main() {
@@ -38,9 +40,22 @@ func main() {
 				log.Printf("Read error: %v", err)
 				break
 			}
-			log.Printf("Got data: %v", err)
-			out, err1 := exec.Command(msg.Command).CombinedOutput()
-			if err := ws.WriteJSON(out); err != nil || err1 != nil {
+			var args []string
+			if err := json.Unmarshal(msg.Args, &args); err != nil {
+				log.Println("Args parse error:", err)
+				return
+			}
+
+			log.Printf("Got data: %v", msg.Command)
+			out, err1 := exec.Command(msg.Command, args...).CombinedOutput() // what the fuck is the ...
+			// the `...` does one thing. its ofc meaning the function accepts zero or more args...
+			outMsg := string(out)
+			if err1 != nil {
+				outMsg = err1.Error()
+			}
+			log.Printf("[R]: %v", outMsg)
+
+			if err := ws.WriteJSON(outMsg); err != nil {
 				log.Printf("Write error: %v", err)
 				break
 			}
