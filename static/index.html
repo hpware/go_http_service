@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>WebSocket Command Client</title>
+
+	<style>
+		body {
+			font-family: monospace;
+			background: #111;
+			color: #eee;
+			padding: 20px;
+		}
+
+		#output {
+			background: #000;
+			border: 1px solid #444;
+			padding: 15px;
+			min-height: 300px;
+			white-space: pre-wrap;
+			overflow-y: auto;
+			margin-bottom: 10px;
+		}
+
+		.command-row {
+			display: flex;
+			gap: 8px;
+		}
+
+		input {
+			flex: 1;
+			background: #222;
+			color: white;
+			border: 1px solid #555;
+			padding: 10px;
+			font-family: monospace;
+		}
+
+		button {
+			padding: 10px 20px;
+			cursor: pointer;
+		}
+
+		.status {
+			margin-bottom: 10px;
+		}
+	</style>
+</head>
+
+<body>
+
+	<h1>Command Console</h1>
+
+	<div class="status">
+		Status:
+		<span id="status">Disconnected</span>
+	</div>
+
+	<div id="output"></div>
+
+	<div class="command-row">
+		<input
+			id="command"
+			type="text"
+			placeholder="Enter command, e.g. ls -la"
+			autocomplete="off"
+		>
+
+		<button id="send">
+			Send
+		</button>
+	</div>
+
+	<script>
+		const output = document.getElementById("output");
+		const status = document.getElementById("status");
+		const commandInput = document.getElementById("command");
+		const sendButton = document.getElementById("send");
+
+		// Use wss:// automatically when the page is served over HTTPS
+		const protocol =
+			window.location.protocol === "https:"
+				? "wss:"
+				: "ws:";
+
+		const ws = new WebSocket(
+			`${protocol}//${window.location.host}/ws`
+		);
+
+		ws.onopen = () => {
+			status.textContent = "Connected";
+			writeOutput("[connected]\n");
+		};
+
+		ws.onclose = () => {
+			status.textContent = "Disconnected";
+			writeOutput("[disconnected]\n");
+		};
+
+		ws.onerror = (error) => {
+			console.error(error);
+			writeOutput("[websocket error]\n");
+		};
+
+		ws.onmessage = (event) => {
+			let data = event.data;
+
+			// If Go sends JSON encoded strings,
+			// decode them if possible.
+			try {
+				data = JSON.parse(data);
+			} catch {
+				// normal text is fine
+			}
+
+			writeOutput(data + "\n");
+		};
+
+		function writeOutput(text) {
+			output.textContent += text;
+			output.scrollTop = output.scrollHeight;
+		}
+
+		function sendCommand() {
+			const raw = commandInput.value.trim();
+
+			if (!raw) {
+				return;
+			}
+
+			if (ws.readyState !== WebSocket.OPEN) {
+				writeOutput("[not connected]\n");
+				return;
+			}
+
+			/*
+			 * Very basic argument parsing.
+			 *
+			 * "ls -la /tmp"
+			 *
+			 * becomes:
+			 *
+			 * {
+			 *   command: "ls",
+			 *   args: ["-la", "/tmp"]
+			 * }
+			 */
+			const parts = raw.split(/\s+/);
+
+			const command = parts[0];
+			const args = parts.slice(1);
+
+			const message = {
+				command,
+				args
+			};
+
+			writeOutput(`$ ${raw}\n`);
+
+			ws.send(JSON.stringify(message));
+
+			commandInput.value = "";
+		}
+
+		sendButton.addEventListener("click", sendCommand);
+
+		commandInput.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
+				sendCommand();
+			}
+		});
+	</script>
+
+</body>
+</html>
