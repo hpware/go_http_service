@@ -82,30 +82,38 @@ func main() {
 			}
 			log.Printf("\n------------------------------------------------------------------------\nGot data: %v", msg.Anno)
 
-			clientsMu.Lock()
-			var resp = destMessage{
-				RemoteUser: usernameParam,
-				RemoteAnno: msg.Anno,
-			}
-			for client, info := range clients { // client is
 
-				if client == ws {
-					resp.RemoteUser = "You"
-				}
-
-				if err := client.WriteJSON(resp); err != nil {
-					log.Printf("Error: %v", err)
-					client.Close()
-					delete(clients, client)
-				}
-				log.Printf("Sending it to %v", info.UserId)
-			}
-			// what the fuck is the ...
-			// the `...` does one thing. its ofc meaning the function accepts zero or more args...
-
-			clientsMu.Unlock() // unlock connection.
 		}
 	})
 	log.Println("HTTP server has started at :8011")
 	http.ListenAndServe(":8011", nil)
+}
+
+
+type sendMSGStruct struct {
+	usernameParam string
+}
+func SendMSG(sendMSGStruct) {
+	clientsMu.Lock()
+	var resp = destMessage{
+		RemoteUser: sendMSGStruct.usernameParam,
+		RemoteAnno: msg.Anno,
+	}
+	for client, info := range clients { // client is
+
+		if client == ws {
+			resp.RemoteUser = "You"
+		}
+
+		if err := client.WriteJSON(resp); err != nil {
+			log.Printf("Error: %v", err)
+			client.Close()
+			delete(clients, client)
+		}
+		log.Printf("Sending it to %v", info.UserId)
+	}
+	// what the fuck is the ...
+	// the `...` does one thing. its ofc meaning the function accepts zero or more args...
+
+	clientsMu.Unlock() // unlock connection.
 }
