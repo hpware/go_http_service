@@ -1,176 +1,197 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>WebSocket Command Client</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Message Client</title>
 
-	<style>
-		body {
-			font-family: monospace;
-			background: #111;
-			color: #eee;
-			padding: 20px;
-		}
+    <style>
+      body {
+        font-family: monospace;
+        background: #111;
+        color: #eee;
+        padding: 20px;
+      }
 
-		#output {
-			background: #000;
-			border: 1px solid #444;
-			padding: 15px;
-			min-height: 300px;
-			white-space: pre-wrap;
-			overflow-y: auto;
-			margin-bottom: 10px;
-		}
+      #output {
+        background: #000;
+        border: 1px solid #444;
+        padding: 15px;
+        min-height: 300px;
+        white-space: pre-wrap;
+        overflow-y: auto;
+        margin-bottom: 10px;
+      }
 
-		.command-row {
-			display: flex;
-			gap: 8px;
-		}
+      .command-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
 
-		input {
-			flex: 1;
-			background: #222;
-			color: white;
-			border: 1px solid #555;
-			padding: 10px;
-			font-family: monospace;
-		}
+      input {
+        min-width: 0;
+        flex: 1;
+        background: #222;
+        color: white;
+        border: 1px solid #555;
+        padding: 10px;
+        font-family: monospace;
+      }
 
-		button {
-			padding: 10px 20px;
-			cursor: pointer;
-		}
+      button {
+        padding: 10px 20px;
+        cursor: pointer;
+      }
 
-		.status {
-			margin-bottom: 10px;
-		}
-	</style>
-</head>
+      .status {
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
 
-<body>
+  <body>
+    <h1>Message Console</h1>
 
-	<h1>Command Console</h1>
+    <form id="connect-form" class="command-row">
+      <input
+        id="username"
+        type="text"
+        placeholder="Your name"
+        aria-label="Your name"
+        autocomplete="nickname"
+        required
+      />
+      <button id="connect" type="submit">Connect</button>
+    </form>
 
-	<div class="status">
-		Status:
-		<span id="status">Disconnected</span>
-	</div>
+    <div class="status">
+      Status:
+      <span id="status">Disconnected</span>
+    </div>
 
-	<div id="output"></div>
+    <div id="output" role="log" aria-label="Messages" aria-live="polite"></div>
 
-	<div class="command-row">
-		<input
-			id="command"
-			type="text"
-			placeholder="Enter command, e.g. ls -la"
-			autocomplete="off"
-		>
+    <form id="message-form" class="command-row">
+      <input
+        id="command"
+        type="text"
+        placeholder="Enter a message"
+        aria-label="Message"
+        autocomplete="off"
+        disabled
+      />
 
-		<button id="send">
-			Send
-		</button>
-	</div>
+      <button id="send" type="submit" disabled>Send</button>
+    </form>
 
-	<script>
-		const output = document.getElementById("output");
-		const status = document.getElementById("status");
-		const commandInput = document.getElementById("command");
-		const sendButton = document.getElementById("send");
+    <script>
+      const output = document.getElementById("output");
+      const status = document.getElementById("status");
+      const commandInput = document.getElementById("command");
+      const sendButton = document.getElementById("send");
+      const usernameInput = document.getElementById("username");
+      const connectButton = document.getElementById("connect");
+      const connectForm = document.getElementById("connect-form");
+      const messageForm = document.getElementById("message-form");
+      let ws;
 
-		// Use wss:// automatically when the page is served over HTTPS
-		const protocol =
-			window.location.protocol === "https:"
-				? "wss:"
-				: "ws:";
+      // Use wss:// automatically when the page is served over HTTPS
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-		const ws = new WebSocket(
-			`${protocol}//${window.location.host}/api/ws`
-		);
+      connectForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const username = usernameInput.value.trim();
+        if (!username || connectButton.disabled) return;
 
-		ws.onopen = () => {
-			status.textContent = "Connected";
-			writeOutput("[connected]\n");
-		};
+        usernameInput.disabled = true;
+        connectButton.disabled = true;
+        status.textContent = "Connecting…";
 
-		ws.onclose = () => {
-			status.textContent = "Disconnected";
-			writeOutput("[disconnected]\n");
-		};
+        try {
+          ws = new WebSocket(
+            `${protocol}//${window.location.host}/api/ws?username=${encodeURIComponent(username)}`,
+          );
+        } catch (error) {
+          console.error(error);
+          setDisconnected();
+          writeOutput("[could not connect]\n");
+          return;
+        }
 
-		ws.onerror = (error) => {
-			console.error(error);
-			writeOutput("[websocket error]\n");
-		};
+        ws.onopen = () => {
+          status.textContent = `Connected as ${username}`;
+          commandInput.disabled = false;
+          sendButton.disabled = false;
+          commandInput.focus();
+          writeOutput("[connected]\n");
+        };
 
-		ws.onmessage = (event) => {
-			let data = event.data;
+        ws.onclose = () => {
+          setDisconnected();
+          writeOutput("[disconnected]\n");
+        };
 
-			// If Go sends JSON encoded strings,
-			// decode them if possible.
-			try {
-				data = JSON.parse(data);
-			} catch {
-				// normal text is fine
-			}
+        ws.onerror = () => {
+          writeOutput(
+            "[connection error — check that the Go server is running]\n",
+          );
+        };
 
-			writeOutput(data + "\n");
-		};
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            if (
+              !message ||
+              typeof message.name !== "string" ||
+              typeof message.anno !== "string"
+            ) {
+              throw new Error("Unexpected message format");
+            }
+            writeOutput(`${message.name || "Anonymous"}: ${message.anno}\n`);
+          } catch (error) {
+            console.error(error);
+            writeOutput("[invalid message received]\n");
+          }
+        };
+      });
 
-		function writeOutput(text) {
-			output.textContent += text;
-			output.scrollTop = output.scrollHeight;
-		}
+      function setDisconnected() {
+        status.textContent = "Disconnected";
+        usernameInput.disabled = false;
+        connectButton.disabled = false;
+        commandInput.disabled = true;
+        sendButton.disabled = true;
+      }
 
-		function sendCommand() {
-			const raw = commandInput.value.trim();
+      function writeOutput(text) {
+        output.textContent += text;
+        output.scrollTop = output.scrollHeight;
+      }
 
-			if (!raw) {
-				return;
-			}
+      function sendMessage(event) {
+        event.preventDefault();
+        const raw = commandInput.value.trim();
 
-			if (ws.readyState !== WebSocket.OPEN) {
-				writeOutput("[not connected]\n");
-				return;
-			}
+        if (!raw) {
+          return;
+        }
 
-			/*
-			 * Very basic argument parsing.
-			 *
-			 * "ls -la /tmp"
-			 *
-			 * becomes:
-			 *
-			 * {
-			 *   command: "ls",
-			 *   args: ["-la", "/tmp"]
-			 * }
-			 */
-			const parts = raw.split(/\s+/);
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          writeOutput("[not connected]\n");
+          return;
+        }
 
-			const command = parts[0];
-			const args = parts.slice(1);
+        const message = {
+          anno: raw,
+        };
 
-			const message = {
-				command,
-				args
-			};
+        ws.send(JSON.stringify(message));
 
-			writeOutput(`$ ${raw}\n`);
+        commandInput.value = "";
+      }
 
-			ws.send(JSON.stringify(message));
-
-			commandInput.value = "";
-		}
-
-		sendButton.addEventListener("click", sendCommand);
-
-		commandInput.addEventListener("keydown", (event) => {
-			if (event.key === "Enter") {
-				sendCommand();
-			}
-		});
-	</script>
-
-</body>
+      messageForm.addEventListener("submit", sendMessage);
+    </script>
+  </body>
 </html>
