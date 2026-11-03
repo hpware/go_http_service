@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -22,8 +23,9 @@ type destMessage struct {
 }
 
 type clientInfo struct {
-	Connected bool
-	UserId    string
+	Connected   bool
+	UserId      string
+	ClientColor string
 }
 
 var clients = make(map[*websocket.Conn]clientInfo)
@@ -37,6 +39,7 @@ func main() {
 
 	http.HandleFunc("/api/ws", func(w http.ResponseWriter, r *http.Request) {
 		usernameParam := r.URL.Query().Get("username")
+		userColor := r.URL.Query().Get("color")
 
 		ws, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -53,18 +56,22 @@ func main() {
 		}
 		// check suer exists or not
 		if exists {
-			err := ws.WriteJSON(map[string]string{
-				"error": "Username taken",
-			})
-			if err != nil {
-				log.Printf("Write ERR: %v", err)
-			}
+			clientsMu.Unlock()
+			ws.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(
+					websocket.CloseNormalClosure,
+					"Username taken", // so each go thing requires `,` for some reasons
+				),
+				time.Now().Add(time.Second),  // WHHYYYY IS ',' REQUIRED
+			)
 			ws.Close()
 			return
 		}
 		clients[ws] = clientInfo{
-			Connected: true,
-			UserId:    usernameParam,
+			Connected:   true,
+			UserId:      usernameParam,
+			ClientColor: userColor,
 		}
 		clientsMu.Unlock()
 		defer func() {
@@ -81,7 +88,11 @@ func main() {
 				break
 			}
 			log.Printf("\n------------------------------------------------------------------------\nGot data: %v", msg.Anno)
-
+			SendMSG(sendMSGStruct{
+				senderUsername: usernameParam,
+				text:           msg.Anno,
+				sender:         ws,
+			})
 
 		}
 	})
@@ -89,19 +100,21 @@ func main() {
 	http.ListenAndServe(":8011", nil)
 }
 
-
 type sendMSGStruct struct {
-	usernameParam string
+	senderUsername string
+	text           string
+	sender         *websocket.Conn
 }
-func SendMSG(sendMSGStruct) {
+
+func SendMSG(data sendMSGStruct) { // so its just Javascript's data:sendMSGStruct but without the ":"
 	clientsMu.Lock()
 	var resp = destMessage{
-		RemoteUser: sendMSGStruct.usernameParam,
-		RemoteAnno: msg.Anno,
+		RemoteUser: data.senderUsername,
+		RemoteAnno: data.text,
 	}
 	for client, info := range clients { // client is
 
-		if client == ws {
+		if client == data.sender {
 			resp.RemoteUser = "You"
 		}
 

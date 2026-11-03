@@ -1,197 +1,225 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebSocket Message Client</title>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>WS Chat</title>
 
-    <style>
-      body {
-        font-family: monospace;
-        background: #111;
-        color: #eee;
-        padding: 20px;
-      }
-
-      #output {
-        background: #000;
-        border: 1px solid #444;
-        padding: 15px;
-        min-height: 300px;
-        white-space: pre-wrap;
-        overflow-y: auto;
-        margin-bottom: 10px;
-      }
-
-      .command-row {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 10px;
-      }
-
-      input {
-        min-width: 0;
-        flex: 1;
-        background: #222;
-        color: white;
-        border: 1px solid #555;
-        padding: 10px;
-        font-family: monospace;
-      }
-
-      button {
-        padding: 10px 20px;
-        cursor: pointer;
-      }
-
-      .status {
-        margin-bottom: 10px;
-      }
-    </style>
-  </head>
-
-  <body>
-    <h1>Message Console</h1>
-
-    <form id="connect-form" class="command-row">
-      <input
-        id="username"
-        type="text"
-        placeholder="Your name"
-        aria-label="Your name"
-        autocomplete="nickname"
-        required
-      />
-      <button id="connect" type="submit">Connect</button>
-    </form>
-
-    <div class="status">
-      Status:
-      <span id="status">Disconnected</span>
-    </div>
-
-    <div id="output" role="log" aria-label="Messages" aria-live="polite"></div>
-
-    <form id="message-form" class="command-row">
-      <input
-        id="command"
-        type="text"
-        placeholder="Enter a message"
-        aria-label="Message"
-        autocomplete="off"
-        disabled
-      />
-
-      <button id="send" type="submit" disabled>Send</button>
-    </form>
-
-    <script>
-      const output = document.getElementById("output");
-      const status = document.getElementById("status");
-      const commandInput = document.getElementById("command");
-      const sendButton = document.getElementById("send");
-      const usernameInput = document.getElementById("username");
-      const connectButton = document.getElementById("connect");
-      const connectForm = document.getElementById("connect-form");
-      const messageForm = document.getElementById("message-form");
-      let ws;
-
-      // Use wss:// automatically when the page is served over HTTPS
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-
-      connectForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const username = usernameInput.value.trim();
-        if (!username || connectButton.disabled) return;
-
-        usernameInput.disabled = true;
-        connectButton.disabled = true;
-        status.textContent = "Connecting…";
-
-        try {
-          ws = new WebSocket(
-            `${protocol}//${window.location.host}/api/ws?username=${encodeURIComponent(username)}`,
-          );
-        } catch (error) {
-          console.error(error);
-          setDisconnected();
-          writeOutput("[could not connect]\n");
-          return;
-        }
-
-        ws.onopen = () => {
-          status.textContent = `Connected as ${username}`;
-          commandInput.disabled = false;
-          sendButton.disabled = false;
-          commandInput.focus();
-          writeOutput("[connected]\n");
-        };
-
-        ws.onclose = () => {
-          setDisconnected();
-          writeOutput("[disconnected]\n");
-        };
-
-        ws.onerror = () => {
-          writeOutput(
-            "[connection error — check that the Go server is running]\n",
-          );
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            if (
-              !message ||
-              typeof message.name !== "string" ||
-              typeof message.anno !== "string"
-            ) {
-              throw new Error("Unexpected message format");
+        <style>
+            body {
+                font-family: monospace;
+                background: #111;
+                color: #eee;
+                padding: 20px;
             }
-            writeOutput(`${message.name || "Anonymous"}: ${message.anno}\n`);
-          } catch (error) {
-            console.error(error);
-            writeOutput("[invalid message received]\n");
-          }
-        };
-      });
 
-      function setDisconnected() {
-        status.textContent = "Disconnected";
-        usernameInput.disabled = false;
-        connectButton.disabled = false;
-        commandInput.disabled = true;
-        sendButton.disabled = true;
-      }
+            #output {
+                background: #000;
+                border: 1px solid #444;
+                padding: 15px;
+                min-height: 300px;
+                white-space: pre-wrap;
+                overflow-y: auto;
+                margin-bottom: 10px;
+            }
 
-      function writeOutput(text) {
-        output.textContent += text;
-        output.scrollTop = output.scrollHeight;
-      }
+            .command-row {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
 
-      function sendMessage(event) {
-        event.preventDefault();
-        const raw = commandInput.value.trim();
+            input {
+                min-width: 0;
+                flex: 1;
+                background: #222;
+                color: white;
+                border: 1px solid #555;
+                padding: 10px;
+                font-family: monospace;
+            }
 
-        if (!raw) {
-          return;
-        }
+            button {
+                padding: 10px 20px;
+                cursor: pointer;
+            }
 
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-          writeOutput("[not connected]\n");
-          return;
-        }
+            .status {
+                margin-bottom: 10px;
+            }
+        </style>
+    </head>
 
-        const message = {
-          anno: raw,
-        };
+    <body>
+        <h1>WS Chat</h1>
 
-        ws.send(JSON.stringify(message));
+        <form id="connect-form" class="command-row">
+            <input
+                id="username"
+                type="text"
+                placeholder="Your name"
+                aria-label="Your name"
+                autocomplete="nickname"
+                required
+            />
+            <button id="connect" type="submit">Connect</button>
+        </form>
 
-        commandInput.value = "";
-      }
+        <div class="status">
+            Status:
+            <span id="status">Disconnected</span>
+        </div>
 
-      messageForm.addEventListener("submit", sendMessage);
-    </script>
-  </body>
+        <div
+            id="output"
+            role="log"
+            aria-label="Messages"
+            aria-live="polite"
+        ></div>
+
+        <form id="message-form" class="command-row">
+            <input
+                id="command"
+                type="text"
+                placeholder="Enter a message"
+                aria-label="Message"
+                autocomplete="off"
+                disabled
+            />
+
+            <button id="send" type="submit" disabled>Send</button>
+        </form>
+
+        <script>
+            const output = document.getElementById("output");
+            const status = document.getElementById("status");
+            const commandInput = document.getElementById("command");
+            const sendButton = document.getElementById("send");
+            const usernameInput = document.getElementById("username");
+            const connectButton = document.getElementById("connect");
+            const connectForm = document.getElementById("connect-form");
+            const messageForm = document.getElementById("message-form");
+            let ws;
+
+            // Use wss:// automatically when the page is served over HTTPS
+            const protocol =
+                window.location.protocol === "https:" ? "wss:" : "ws:";
+
+            connectForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                const username = usernameInput.value.trim();
+                if (!username || connectButton.disabled) return;
+                let serverError = "";
+
+                usernameInput.disabled = true;
+                connectButton.disabled = true;
+                status.textContent = "Connecting…";
+
+                try {
+                    ws = new WebSocket(
+                        `${protocol}//${window.location.host}/api/ws?username=${encodeURIComponent(username)}`,
+                    );
+                } catch (error) {
+                    console.error(error);
+                    setDisconnected();
+                    writeOutput("[could not connect]\n");
+                    return;
+                }
+
+                ws.onopen = () => {
+                    status.textContent = `Connected as ${username}`;
+                    commandInput.disabled = false;
+                    sendButton.disabled = false;
+                    commandInput.focus();
+                    writeOutput("[connected]\n");
+                };
+
+                ws.onclose = (event) => {
+                    setDisconnected();
+                    const reason = serverError || event.reason;
+                    if (reason) {
+                        status.textContent = `Error: ${reason}`;
+                        if (!serverError) {
+                            writeOutput(`Error: ${reason}\n`);
+                        }
+                        usernameInput.focus();
+                        return;
+                    }
+                    writeOutput("[disconnected]\n");
+                };
+
+                ws.onerror = () => {
+                    if (serverError) return;
+                    writeOutput(
+                        "[connection error — check that the Go server is running]\n",
+                    );
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        if (message && typeof message.error === "string") {
+                            serverError = message.error;
+                            status.textContent = `Error: ${serverError}`;
+                            writeOutput(`Error: ${serverError}\n`);
+                            commandInput.disabled = true;
+                            sendButton.disabled = true;
+                            ws.close();
+                            return;
+                        }
+                        if (
+                            !message ||
+                            typeof message.name !== "string" ||
+                            typeof message.anno !== "string"
+                        ) {
+                            throw new Error("Unexpected message format");
+                        }
+                        writeOutput(
+                            `${message.name || "Anonymous"}: ${message.anno}\n`,
+                        );
+                    } catch (error) {
+                        console.error(error);
+                        writeOutput("[invalid message received]\n");
+                    }
+                };
+            });
+
+            function setDisconnected() {
+                status.textContent = "Disconnected";
+                usernameInput.disabled = false;
+                connectButton.disabled = false;
+                commandInput.disabled = true;
+                sendButton.disabled = true;
+            }
+
+            function writeOutput(text) {
+                output.textContent += text;
+                output.scrollTop = output.scrollHeight;
+            }
+
+            function sendMessage(event) {
+                event.preventDefault();
+                const raw = commandInput.value.trim();
+
+                if (!raw) {
+                    return;
+                }
+
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    writeOutput("[not connected]\n");
+                    return;
+                }
+
+                const message = {
+                    anno: raw,
+                };
+
+                ws.send(JSON.stringify(message));
+
+                commandInput.value = "";
+            }
+
+            messageForm.addEventListener("submit", sendMessage);
+        </script>
+    </body>
 </html>
